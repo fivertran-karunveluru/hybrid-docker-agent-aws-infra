@@ -1,8 +1,0 @@
-{
-  "agent_name": "kveluru-docker-agent-test",
-  "group_id": "facility_punch",
-  "aws_region": "us-west-2",
-  "ip_address_for_ssh_access": "172.14.178.26/32",
-  "fivetran_api_key": "XV7VlsiQVvATTivM",
-  "fivetran_api_secret": "p25VwQpAsKzxmlp4gwCLhpwxxSlnEexe"
-}
