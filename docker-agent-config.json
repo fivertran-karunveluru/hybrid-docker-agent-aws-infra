@@ -1,0 +1,8 @@
+{
+  "agent_name": "hybrid-docker-agent",
+  "group_id": "xxxxxxxxxxxxxxxx",
+  "aws_region": "us-west-2",
+  "ip_address_for_ssh_access": "xxx.xxx.xxx.xxx/32",
+  "fivetran_api_key": "xxxxxxxxxxxxxxxx",
+  "fivetran_api_secret": "xxxxxxxxxxxxxxxx"
+}
