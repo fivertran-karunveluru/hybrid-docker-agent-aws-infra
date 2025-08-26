@@ -1,0 +1,290 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Docker Hybrid Agent Stack
+
+Parameters:
+  ProjectName:
+    Description: Name of project for tag and instance names and instance profiles
+    Default: csg-sa-kveluru
+    Type: String
+
+  Environment:
+    Description: The AWS account to create resources in (lowercase)
+    Type: String
+    Default: internal-sales
+    AllowedValues:
+      - internal-sales
+      - internal-sales-dev
+
+  AmiId:
+    Description: OPTIONAL Id of the AMI used to create the EC2 instance
+    Type: AWS::EC2::Image::Id
+    Default: ami-0520f976ad2e6300c
+
+  InstanceType:
+    Description: EC2 Instance Type
+    Type: String
+    Default: t3.xlarge
+    AllowedValues:
+      - t2.xlarge
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      - t2.micro
+
+  MyIp:
+    Description: IP Address of my computer
+    Type: String
+    Default: 172.14.178.26/32
+
+  HealthCheckPort:
+    Type: Number
+    Default: 8090
+    Description: Port number to use for accessing agent health
+
+  ExternalId:
+    Description: ExternalId for the Docker Agent
+    Type: String
+    Default: representing_rose
+
+  AgentToken:
+    Description: AgentToken for the Docker Agent
+    Type: String
+    Default: d3JpdF9zaW1pbGFyaXRpZXM6RUNlc1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+  TeamName:
+    Description: Team Name
+    Type: String
+    Default: solution_architects
+
+  DepartmentName:
+    Description: Department Name
+    Type: String
+    Default: customer_solutions_group
+
+  OwnerName:
+    Description: Owner Name
+    Type: String
+    Default: karunakar.veluru@fivetran.com
+
+  ExpiresOn:
+    Description: Expires On
+    Type: String
+    Default: 2025-08-30
+
+  KeyName:
+    Description: Keypair Name
+    Type: String
+    Default: kveluru-key-pair
+  
+  FivetranAWSAccountId:
+    Description: Fivetran AWS Account ID
+    Type: String
+    Default: 834469178297
+
+Mappings:
+  EnvironmentMap:
+    internal-sales:
+      VpcId: vpc-0559852c7bdd6f4b7
+      SubnetId1: subnet-0f768037aa7bebf93 # technical-sales-subnet-public2
+      SubnetId2: subnet-0ebf54d0f15f4de5b # technical-sales-subnet-public3
+      AZ1: us-west-2b
+      AZ2: us-west-2c
+    internal-sales-dev:
+      VpcId: vpc-08185b739d61a139f
+      SubnetId1: subnet-0bb839954f00345b1
+      SubnetId2: subnet-09b162f69a76196df
+      AZ1: us-west-2a
+      AZ2: us-west-2b
+
+Resources:
+  DockerAgentEC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ["-",[!Ref ProjectName, "EC2-Role"]]
+      Description: Role for Docker Agent EC2
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+          - Effect: Allow # Allow Fivetran to assume the role
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${FivetranAWSAccountId}:root
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref ExternalId
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+        - Key: owner
+          Value: !Ref OwnerName
+        - Key: team
+          Value: !Ref TeamName
+        - Key: expires_on
+          Value: !Ref ExpiresOn
+        - Key: department
+          Value: !Ref DepartmentName
+
+  AgentEC2ReadMetadataPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join ["-",[!Ref ProjectName, "EC2-Read-Metadata"]]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+            - ec2:DescribeTags
+            - ec2:DescribeInstances
+            Resource: "*"
+      Roles:
+        - Ref: DockerAgentEC2Role
+
+  DockerAgentEC2S3Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join ["-",[!Ref ProjectName, "EC2-S3-Permisions"]]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+            Resource: "*"
+      Roles:
+        - Ref: DockerAgentEC2Role
+
+  DockerAgentDynamoPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join ["-",[!Ref ProjectName, "EC2-Dynamo-Permisions"]]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:DescribeStream
+              - dynamodb:DescribeTable
+              - dynamodb:GetRecords
+              - dynamodb:Scan
+              - dynamodb:ListTables
+              - dynamodb:GetShardIterator
+            Resource: "*"
+      Roles:
+        - Ref: DockerAgentEC2Role
+
+  DockerAgentEC2RoleInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Join ["-",[!Ref ProjectName, "EC2-IP"]]
+      Path: /
+      Roles:
+        - !Ref DockerAgentEC2Role
+
+  HybridAgentInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !FindInMap [EnvironmentMap, !Ref Environment, SubnetId1]
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SecurityGroupIds:
+        - !Ref AgentSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 60
+            VolumeType: gp3
+      IamInstanceProfile: !Ref DockerAgentEC2RoleInstanceProfile
+      Monitoring: true
+      UserData:
+        Fn::Base64: !Sub
+        - |
+          #!/bin/bash
+          sudo yum update -y
+          sleep 5
+          sudo yum install -y docker
+          sudo service docker start
+          sudo yum install -y https://s3.us-east-1.amazonaws.com/amazon-ssm-us-east-1/latest/linux_amd64/amazon-ssm-agent.rpm
+          sudo useradd -m -s "$(which bash)" -G wheel fivetran
+          sudo usermod -aG docker fivetran
+          sudo -u fivetran TOKEN="${AGENT_TOKEN}" RUNTIME=docker bash -c "$(curl -sL https://raw.githubusercontent.com/fivetran/hybrid_deployment/main/install.sh)"
+        - AGENT_TOKEN: !Ref AgentToken
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-docker-agent-ec2"
+        - Key: owner
+          Value: !Ref OwnerName
+        - Key: team
+          Value: !Ref TeamName
+        - Key: expires_on
+          Value: !Ref ExpiresOn
+        - Key: department
+          Value: !Ref DepartmentName
+
+  AgentSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !FindInMap [EnvironmentMap, !Ref Environment, VpcId]
+      GroupName: !Join ['-', [!Ref AWS::StackName, 'docker-agent-sg']]
+      GroupDescription: Docker Agent Instance Security Group
+      SecurityGroupIngress:
+        - Description: Allow SSH from home
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref MyIp
+        - Description: Allow access to Github repo
+          IpProtocol: tcp
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 185.0.0.0/8
+        - Description: Fivetran API
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 35.236.237.87/32
+        - Description: Fivetran IdP
+          IpProtocol: tcp
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 35.188.225.82/32
+        - Description: Google Artifactory
+          IpProtocol: tcp
+          FromPort: 0
+          ToPort: 0
+          CidrIp: 142.0.0.0/8
+        - Description: Agent health check
+          IpProtocol: tcp
+          FromPort: !Ref HealthCheckPort
+          ToPort: !Ref HealthCheckPort
+          CidrIp: !Ref MyIp
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-docker-agent-sg"
+        - Key: owner
+          Value: !Ref OwnerName
+        - Key: team
+          Value: !Ref TeamName
+        - Key: expires_on
+          Value: !Ref ExpiresOn
+        - Key: department
+          Value: !Ref DepartmentName
+
+
+Outputs:
+  AgentInstanceId:
+    Description: Hybrid Agent Instance Id
+    Value: !Ref HybridAgentInstance
