@@ -18,7 +18,7 @@ Parameters:
   AmiId:
     Description: OPTIONAL Id of the AMI used to create the EC2 instance
     Type: AWS::EC2::Image::Id
-    Default: ami-0520f976ad2e6300c
+    Default: ami-0ebf411a80b6b22cb
 
   InstanceType:
     Description: EC2 Instance Type
@@ -69,7 +69,7 @@ Parameters:
   ExpiresOn:
     Description: Expires On
     Type: String
-    Default: 2025-08-30
+    Default: 2026-07-31
 
   KeyName:
     Description: Keypair Name
@@ -288,3 +288,33 @@ Outputs:
   AgentInstanceId:
     Description: Hybrid Agent Instance Id
     Value: !Ref HybridAgentInstance
+
+  VPCId:
+    Description: VPC ID for cross-stack references
+    Value: !FindInMap [EnvironmentMap, !Ref Environment, VpcId]
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCId"
+
+  SubnetId1:
+    Description: First Subnet ID for cross-stack references
+    Value: !FindInMap [EnvironmentMap, !Ref Environment, SubnetId1]
+    Export:
+      Name: !Sub "${AWS::StackName}-SubnetId1"
+
+  SubnetId2:
+    Description: Second Subnet ID for cross-stack references
+    Value: !FindInMap [EnvironmentMap, !Ref Environment, SubnetId2]
+    Export:
+      Name: !Sub "${AWS::StackName}-SubnetId2"
+
+  EC2SecurityGroupId:
+    Description: EC2 Security Group ID for cross-stack references
+    Value: !Ref AgentSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-EC2SecurityGroupId"
+
+  StackName:
+    Description: Stack Name for cross-stack references
+    Value: !Ref AWS::StackName
+    Export:
+      Name: !Sub "${AWS::StackName}-StackName"
